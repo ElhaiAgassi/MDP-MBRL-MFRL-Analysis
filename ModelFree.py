@@ -103,7 +103,7 @@ def print_policy(policy, height, width, special_locations):
     print()
 
 
-def run_model_free_solver(test_case):
+def model_free_solver(test_case):
     w, h, L, p, r = test_case['w'], test_case['h'], test_case['L'], test_case['p'], test_case['r']
     L = [(x, h - y - 1, reward) for x, y, reward in L]  # Adjust coordinates
 
@@ -122,6 +122,22 @@ def run_model_free_solver(test_case):
 
     policy = agent.get_policy()
     return value_function, policy, env.special_locations
+def run_model_free_solver(test_case):
+    w, h, L, p, r = test_case['w'], test_case['h'], test_case['L'], test_case['p'], test_case['r']
+    L = [(x, h - y - 1, reward) for x, y, reward in L]  # Adjust coordinates
+
+    env = GridWorld(w, h, L, p, r)
+    agent = QLearningAgent(env, learning_rate=0.1, discount_factor=0.9, epsilon=0.1)
+    agent.learn(n_episodes=10000)
+
+    value_function = np.zeros((h, w))
+    for y in range(h):
+        for x in range(w):
+            state = env._state_to_index((x, y))
+            value_function[y, x] = np.max(agent.q_table[state])
+
+    policy = agent.get_policy()
+    return value_function, policy
 
 
 if __name__ == "__main__":
@@ -132,7 +148,7 @@ if __name__ == "__main__":
         print(f"Test {i}:")
         print(f"Grid size: {test['w']}x{test['h']}")
 
-        value_function, policy, special_locations = run_model_free_solver(test)
+        value_function, policy, special_locations = model_free_solver(test)
         results.append((value_function, policy))
 
         print("\nValue function:")

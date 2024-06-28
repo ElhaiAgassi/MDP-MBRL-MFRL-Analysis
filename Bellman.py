@@ -121,14 +121,22 @@ def run_bellman_solver(test_case):
     w, h, L, p, r = test_case['w'], test_case['h'], test_case['L'], test_case['p'], test_case['r']
     solver = BellmanSolver(w, h, L, r, p)  # Use 0.9 as the discount factor
     solver.solve()
-    return solver
+    policy = solver.get_policy()
+    return solver.value_function, policy  # Flip the grid vertically to match the expected orientation
+
+def bellman_solver(test_case):
+    w, h, L, p, r = test_case['w'], test_case['h'], test_case['L'], test_case['p'], test_case['r']
+    solver = BellmanSolver(w, h, L, r, p)  # Use 0.9 as the discount factor
+    solver.solve()
+    policy = solver.get_policy()
+    return solver  # Flip the grid vertically to match the expected orientation
 
 
 if __name__ == "__main__":
     tests = parse_tests()
     for i, test in enumerate(tests, 1):
         print(f"Test {i}:")
-        solver = run_bellman_solver(test)
+        solver = bellman_solver(test)
         print(f"Grid shape: {solver.value_function.shape}")
 
         print("Value function:")

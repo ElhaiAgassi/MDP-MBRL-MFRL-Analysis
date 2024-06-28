@@ -135,7 +135,7 @@ class ModelBasedRL:
             print()
         print()
 
-def run_model_based_solver(test_case):
+def model_based_solver(test_case):
     w, h, L, p, r = test_case['w'], test_case['h'], test_case['L'], test_case['p'], test_case['r']
     L = [(x, h - y - 1, reward) for x, y, reward in L]  # Adjust coordinates
 
@@ -145,12 +145,23 @@ def run_model_based_solver(test_case):
     model.value_iteration()
     return model
 
+def run_model_based_solver(test_case):
+    w, h, L, p, r = test_case['w'], test_case['h'], test_case['L'], test_case['p'], test_case['r']
+    L = [(x, h - y - 1, reward) for x, y, reward in L]  # Adjust coordinates
+    discount_factor = 0.9
+
+    model = ModelBasedRL(w, h, L, p, r)
+    model.simulate_experience(10000)
+    model.transition_probs, _ = model.estimate_model()
+    model.value_iteration()
+    return model.value_function, model.get_policy()
+
 if __name__ == "__main__":
     tests = parse_tests()
     results = []
 
     for i, test in enumerate(tests, start=1):
-        model = run_model_based_solver(test)
+        model = model_based_solver(test)
         print(f"Grid shape: {model.value_function.shape}")
         results.append((model.value_function, model.get_policy()))
 

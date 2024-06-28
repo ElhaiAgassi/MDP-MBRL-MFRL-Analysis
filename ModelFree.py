@@ -10,7 +10,7 @@ class GridWorld:
         self.p = p
         self.default_reward = default_reward
         self.state = None
-        self.actions = [0, 1, 2, 3]  # 0: left, 1: down, 2: right, 3: up
+        self.actions = [0, 1, 2, 3]  # 0: up, 1: down, 2: left, 3: right
 
     def reset(self):
         self.state = (0, 0)
@@ -38,6 +38,7 @@ class GridWorld:
     def _index_to_state(self, index):
         y, x = divmod(index, self.width)
         return (x, y)
+
 
 class QLearningAgent:
     def __init__(self, env, learning_rate=0.1, discount_factor=0.99, epsilon=0.1):
@@ -87,13 +88,20 @@ class QLearningAgent:
                     print(f"  Action {action}: {q_value:.2f}")
                 print()
 
-def print_policy(policy, height, width):
-    action_symbols = {0: '↑', 1: '→', 2: '←', 3: '→'}
+
+def print_policy(policy, height, width, special_locations):
+    action_symbols = {0: '↑', 1: '→', 2: '←', 3: '↓'}
     for y in range(height):
         for x in range(width):
-            print(f"{action_symbols.get(policy[y, x], 'S'):^3}", end=' ')  # Center align the symbols
+            if (x, y) in special_locations:
+                reward = special_locations[(x, y)]
+                symbol = 'W' if reward == 0 else str(reward)
+            else:
+                symbol = action_symbols.get(policy[y, x], 'S')
+            print(f"{symbol:^3}", end=' ')
         print()
     print()
+
 
 def run_model_free_solver(test_case):
     w, h, L, p, r = test_case['w'], test_case['h'], test_case['L'], test_case['p'], test_case['r']
@@ -107,10 +115,14 @@ def run_model_free_solver(test_case):
     for y in range(h):
         for x in range(w):
             state = env._state_to_index((x, y))
-            value_function[y, x] = np.max(agent.q_table[state])
+            if (x, y) in env.special_locations:
+                value_function[y, x] = env.special_locations[(x, y)]
+            else:
+                value_function[y, x] = np.max(agent.q_table[state])
 
     policy = agent.get_policy()
-    return value_function, policy
+    return value_function, policy, env.special_locations
+
 
 if __name__ == "__main__":
     tests = parse_tests()
@@ -120,14 +132,20 @@ if __name__ == "__main__":
         print(f"Test {i}:")
         print(f"Grid size: {test['w']}x{test['h']}")
 
-        value_function, policy = run_model_free_solver(test)
+        value_function, policy, special_locations = run_model_free_solver(test)
         results.append((value_function, policy))
 
         print("\nValue function:")
-        for row in value_function:
-            print(" ".join([f"{v:7.4f}" for v in row]))
+        for y, row in enumerate(value_function):
+            for x, value in enumerate(row):
+                if (x, y) in special_locations:
+                    reward = special_locations[(x, y)]
+                    print(f"{reward:7.4f}", end=" ")
+                else:
+                    print(f"{value:7.4f}", end=" ")
+            print()
 
         print("\nPolicy:")
-        print_policy(policy, test['h'], test['w'])
+        print_policy(policy, test['h'], test['w'], special_locations)
 
-        print("-"*40 + "")
+        print("-" * 40)

@@ -1,11 +1,13 @@
 import numpy as np
 from get_all_test_cases import parse_tests
 
+
 class BellmanSolver:
     def __init__(self, width, height, special_locations, default_reward, discount_factor, p=0.8):
         self.width = width
         self.height = height
-        self.special_locations = {(x, height-1-y): reward for x, y, reward in special_locations}  # Invert y-coordinate
+        self.special_locations = {(x, height - 1 - y): reward for x, y, reward in
+                                  special_locations}  # Invert y-coordinate
         self.default_reward = default_reward
         self.discount_factor = discount_factor
         self.value_function = np.zeros((height, width))
@@ -77,6 +79,7 @@ class BellmanSolver:
             self.value_function = new_value_function
         print(f"Converged after {iteration} iterations")
 
+
 def print_policy(policy, height, width):
     action_symbols = {0: '←', 1: '→', 2: '↑', 3: '↓'}
     for y in range(height):
@@ -85,12 +88,14 @@ def print_policy(policy, height, width):
         print()
     print()
 
+
 def run_bellman_solver(test_case):
     w, h, L, p, r = test_case['w'], test_case['h'], test_case['L'], test_case['p'], test_case['r']
     solver = BellmanSolver(w, h, L, r, 0.9, p)  # Use 0.9 as the discount factor
     solver.solve()
     policy = solver.get_policy()
     return solver.value_function, policy  # Flip the grid vertically to match the expected orientation
+
 
 if __name__ == "__main__":
     tests = parse_tests()
@@ -106,4 +111,4 @@ if __name__ == "__main__":
         print("\nPolicy:")
         print_policy(policy, test['h'], test['w'])
 
-        print("\n" + "-"*40)
+        print("\n" + "-" * 40)

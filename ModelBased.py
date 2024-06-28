@@ -3,13 +3,12 @@ import random
 from get_all_test_cases import parse_tests
 
 class ModelBasedRL:
-    def __init__(self, width, height, special_locations, p, default_reward, discount_factor):
+    def __init__(self, width, height, special_locations, p, default_reward):
         self.width = width
         self.height = height
         self.special_locations = {(x, y): reward for x, y, reward in special_locations}
         self.p = p
         self.default_reward = default_reward
-        self.discount_factor = discount_factor
 
         self.actions = ['up', 'down', 'left', 'right']
         self.action_effects = {
@@ -23,6 +22,9 @@ class ModelBasedRL:
         self.transition_counts = {(x, y): {a: np.zeros((height, width)) for a in self.actions}
                                   for x in range(width) for y in range(height)}
         self.reward_counts = np.zeros((height, width))
+
+    def is_within_bounds(self, x, y):
+        return 0 <= x < self.width and 0 <= y < self.height
 
     def is_terminal(self, x, y):
         return (x, y) in self.special_locations
@@ -86,7 +88,7 @@ class ModelBasedRL:
                                            for nx in range(self.width) for ny in range(self.height))
                         action_values.append(action_value)
 
-                    new_value_function[y, x] = self.reward_counts[y, x] + self.discount_factor * max(action_values)
+                    new_value_function[y, x] = self.reward_counts[y, x] + self.p * max(action_values)
                     delta = max(delta, abs(v - new_value_function[y, x]))
 
             self.value_function = new_value_function
@@ -97,11 +99,18 @@ class ModelBasedRL:
         policy = np.zeros((self.height, self.width), dtype=int)
         for y in range(self.height):
             for x in range(self.width):
-                if not self.is_terminal(x, y):
-                    action_values = [sum(self.transition_probs[(x, y)][action][ny, nx] * self.value_function[ny, nx]
-                                         for nx in range(self.width) for ny in range(self.height))
-                                     for action in self.actions]
-                    policy[y, x] = np.argmax(action_values)
+                if (x, y) in self.special_locations:
+                    continue
+                action_values = []
+                for action, (dx, dy) in enumerate([(-1, 0), (1, 0), (0, -1), (0, 1)]):
+                    nx, ny = x + dx, y + dy
+                    if self.is_within_bounds(nx, ny):
+                        if not ((nx, ny) in self.special_locations and (self.special_locations[(nx, ny)] == 0)):
+                            action_value = self.value_function[ny, nx]  # Consider probability p
+                            action_values.append((action_value, action))
+                if action_values:
+                    best_action = max(action_values, key=lambda x: x[0])[1]
+                    policy[y, x] = best_action
         return policy
 
     def print_value_function(self):
@@ -109,39 +118,47 @@ class ModelBasedRL:
             print(" ".join([f"{v:.2f}" for v in row]))
         print()
 
-def print_policy(policy, height, width):
-    action_symbols = {0: '↑', 1: '↓', 2: '←', 3: '→'}
-    for y in range(height):
-        for x in range(width):
-            print(f"{action_symbols.get(policy[y, x], 'T'):^3}", end=' ')  # Center align the symbols
+
+    def print_policy(self):
+        policy = self.get_policy()
+        action_symbols = {0: '←', 1: '→', 2: '↑', 3: '↓'}
+        for y in range(self.height):
+            for x in range(self.width):
+                if (x, y) in self.special_locations:
+                    if self.special_locations[(x, y)] == 0:
+                        print('W', end=' ')
+                    else:
+                        print(self.special_locations[(x, y)], end=' ')
+
+                else:
+                    print(action_symbols[policy[y, x]], end=' ')
+            print()
         print()
-    print()
 
 def run_model_based_solver(test_case):
     w, h, L, p, r = test_case['w'], test_case['h'], test_case['L'], test_case['p'], test_case['r']
     L = [(x, h - y - 1, reward) for x, y, reward in L]  # Adjust coordinates
-    discount_factor = 0.9
 
-    model = ModelBasedRL(w, h, L, p, r, discount_factor)
+    model = ModelBasedRL(w, h, L, p, r)
     model.simulate_experience(10000)
     model.transition_probs, _ = model.estimate_model()
     model.value_iteration()
-    return model.value_function, model.get_policy()
+    return model
 
 if __name__ == "__main__":
     tests = parse_tests()
     results = []
 
     for i, test in enumerate(tests, start=1):
-        value_function, policy = run_model_based_solver(test)
-        print(f"Grid shape: {value_function.shape}")
-        results.append((value_function, policy))
+        model = run_model_based_solver(test)
+        print(f"Grid shape: {model.value_function.shape}")
+        results.append((model.value_function, model.get_policy()))
 
         print(f"Test {i} Value Function:")
-        for row in value_function:
+        for row in model.value_function:
             print(" ".join([f"{v:.4f}" for v in row]))
 
         print(f"Test {i} Policy:")
-        print_policy(policy, test['h'], test['w'])
+        model.print_policy()
 
         print("-"*40 + "\n")

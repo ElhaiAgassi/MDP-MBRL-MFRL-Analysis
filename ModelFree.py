@@ -88,7 +88,7 @@ class QLearningAgent:
                 print()
 
 def print_policy(policy, height, width):
-    action_symbols = {0: '←', 1: '↓', 2: '→', 3: '↑'}
+    action_symbols = {0: '↑', 1: '→', 2: '←', 3: '→'}
     for y in range(height):
         for x in range(width):
             print(f"{action_symbols.get(policy[y, x], 'S'):^3}", end=' ')  # Center align the symbols

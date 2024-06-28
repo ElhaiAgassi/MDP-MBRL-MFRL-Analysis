@@ -1,102 +1,147 @@
 import numpy as np
 import random
+from get_all_test_cases import parse_tests
 
-# Define grid world dimensions and parameters
-w = 4
-h = 3
-L = [(1, 1, 0), (3, 2, 1), (3, 1, -1)]  # terminal states with rewards
-p = 0.8  # probability of intended action
-r = -0.04  # reward for non-terminal states
-gamma = 0.9  # discount factor
-tol = 0.01  # tolerance for stopping criteria
+class ModelBasedRL:
+    def __init__(self, width, height, special_locations, p, default_reward, discount_factor):
+        self.width = width
+        self.height = height
+        self.special_locations = {(x, y): reward for x, y, reward in special_locations}
+        self.p = p
+        self.default_reward = default_reward
+        self.discount_factor = discount_factor
 
-# Actions and their effects
-actions = ['up', 'down', 'left', 'right']
-action_vectors = {
-    'up': (-1, 0),
-    'down': (1, 0),
-    'left': (0, -1),
-    'right': (0, 1)
-}
+        self.actions = ['up', 'down', 'left', 'right']
+        self.action_effects = {
+            'up': (-1, 0), 'down': (1, 0), 'left': (0, -1), 'right': (0, 1)
+        }
 
-# Initialize value function
-V = np.zeros((h, w))
+        self.value_function = np.zeros((height, width))
+        for (x, y), reward in self.special_locations.items():
+            self.value_function[y, x] = reward
 
-# Set terminal states
-terminals = {(x-1, y-1): reward for x, y, reward in L}
-for (x, y), reward in terminals.items():
-    V[x, y] = reward
+        self.transition_counts = {(x, y): {a: np.zeros((height, width)) for a in self.actions}
+                                  for x in range(width) for y in range(height)}
+        self.reward_counts = np.zeros((height, width))
 
-# Initialize transition and reward models
-transition_counts = {(x, y): {a: np.zeros((h, w)) for a in actions} for x in range(h) for y in range(w)}
-reward_counts = np.zeros((h, w))
+    def is_terminal(self, x, y):
+        return (x, y) in self.special_locations
 
-# Function to get next state
-def next_state(x, y, action):
-    dx, dy = action_vectors[action]
-    nx, ny = x + dx, y + dy
-    if 0 <= nx < h and 0 <= ny < w:
-        return nx, ny
-    return x, y
+    def next_state(self, x, y, action):
+        dx, dy = self.action_effects[action]
+        nx, ny = x + dx, y + dy
+        if 0 <= nx < self.width and 0 <= ny < self.height:
+            return nx, ny
+        return x, y  # Stay in place if would move out of bounds
 
-# Simulate experience
-def simulate_experience(num_episodes):
-    for episode in range(num_episodes):
-        x, y = random.randint(0, h-1), random.randint(0, w-1)
-        while (x, y) in terminals:
-            x, y = random.randint(0, h-1), random.randint(0, w-1)
-        while (x, y) not in terminals:
-            action = random.choice(actions)
-            nx, ny = next_state(x, y, action)
-            if random.random() < p:
-                next_x, next_y = nx, ny
-            else:
-                next_x, next_y = next_state(x, y, random.choice(actions))
-            reward = terminals.get((next_x, next_y), r)
-            transition_counts[(x, y)][action][next_x, next_y] += 1
-            reward_counts[next_x, next_y] = reward
-            x, y = next_x, next_y
+    def simulate_experience(self, num_episodes):
+        for _ in range(num_episodes):
+            x, y = random.randint(0, self.width - 1), random.randint(0, self.height - 1)
+            while self.is_terminal(x, y):
+                x, y = random.randint(0, self.width - 1), random.randint(0, self.height - 1)
 
-# Estimate transition probabilities and rewards from counts
-def estimate_model():
-    transition_prob = {(x, y): {a: np.zeros((h, w)) for a in actions} for x in range(h) for y in range(w)}
-    for (x, y), action_counts in transition_counts.items():
-        for action, counts in action_counts.items():
-            total = counts.sum()
-            if total > 0:
-                transition_prob[(x, y)][action] = counts / total
-    return transition_prob, reward_counts
+            while not self.is_terminal(x, y):
+                action = random.choice(self.actions)
+                intended_nx, intended_ny = self.next_state(x, y, action)
 
-# Value Iteration
-def value_iteration(V, gamma, estimated_transitions, estimated_rewards, terminals, actions, max_iterations=1000, tol=0.01):
-    for iteration in range(max_iterations):
-        new_V = np.copy(V)
-        delta = 0
-        for x in range(h):
-            for y in range(w):
-                if (x, y) in terminals:
-                    continue
-                v = V[x, y]
-                action_values = []
-                for action in actions:
-                    action_value = sum(estimated_transitions[(x, y)][action][nx, ny] * V[nx, ny] for nx in range(h) for ny in range(w))
-                    action_values.append(action_value)
-                new_V[x, y] = estimated_rewards[x, y] + gamma * max(action_values)
-                delta = max(delta, abs(v - new_V[x, y]))
-        V = new_V
-        print(f"Iteration {iteration + 1}:")
-        print(V)
-        if delta < tol:
-            break
-    return V
+                if random.random() < self.p:
+                    nx, ny = intended_nx, intended_ny
+                else:
+                    # Random unintended action
+                    nx, ny = self.next_state(x, y, random.choice(self.actions))
 
-# Simulate experience to gather data
-simulate_experience(10000)
+                reward = self.special_locations.get((nx, ny), self.default_reward)
+                self.transition_counts[(x, y)][action][ny, nx] += 1
+                self.reward_counts[ny, nx] = reward
 
-# Estimate the model from the gathered data
-estimated_transitions, estimated_rewards = estimate_model()
+                x, y = nx, ny
 
-# Run value iteration using the estimated model
-final_values = value_iteration(V, gamma, estimated_transitions, estimated_rewards, terminals, actions, tol=tol)
-print("Final Value Function:")
-print(final_values)
+    def estimate_model(self):
+        transition_probs = {(x, y): {a: np.zeros((self.height, self.width)) for a in self.actions}
+                            for x in range(self.width) for y in range(self.height)}
+
+        for (x, y), action_counts in self.transition_counts.items():
+            for action, counts in action_counts.items():
+                total = counts.sum()
+                if total > 0:
+                    transition_probs[(x, y)][action] = counts / total
+
+        return transition_probs, self.reward_counts
+
+    def value_iteration(self, max_iterations=1000, tolerance=0.01):
+        for _ in range(max_iterations):
+            new_value_function = np.copy(self.value_function)
+            delta = 0
+
+            for x in range(self.width):
+                for y in range(self.height):
+                    if self.is_terminal(x, y):
+                        continue
+
+                    v = self.value_function[y, x]
+                    action_values = []
+
+                    for action in self.actions:
+                        action_value = sum(self.transition_probs[(x, y)][action][ny, nx] * self.value_function[ny, nx]
+                                           for nx in range(self.width) for ny in range(self.height))
+                        action_values.append(action_value)
+
+                    new_value_function[y, x] = self.reward_counts[y, x] + self.discount_factor * max(action_values)
+                    delta = max(delta, abs(v - new_value_function[y, x]))
+
+            self.value_function = new_value_function
+            if delta < tolerance:
+                break
+
+    def get_policy(self):
+        policy = np.zeros((self.height, self.width), dtype=int)
+        for y in range(self.height):
+            for x in range(self.width):
+                if not self.is_terminal(x, y):
+                    action_values = [sum(self.transition_probs[(x, y)][action][ny, nx] * self.value_function[ny, nx]
+                                         for nx in range(self.width) for ny in range(self.height))
+                                     for action in self.actions]
+                    policy[y, x] = np.argmax(action_values)
+        return policy
+
+    def print_value_function(self):
+        for row in self.value_function:
+            print(" ".join([f"{v:.2f}" for v in row]))
+        print()
+
+def print_policy(policy, height, width):
+    action_symbols = {0: '↑', 1: '↓', 2: '←', 3: '→'}
+    for y in range(height):
+        for x in range(width):
+            print(f"{action_symbols.get(policy[y, x], 'T'):^3}", end=' ')  # Center align the symbols
+        print()
+    print()
+
+def run_model_based_solver(test_case):
+    w, h, L, p, r = test_case['w'], test_case['h'], test_case['L'], test_case['p'], test_case['r']
+    L = [(x, h - y - 1, reward) for x, y, reward in L]  # Adjust coordinates
+    discount_factor = 0.9
+
+    model = ModelBasedRL(w, h, L, p, r, discount_factor)
+    model.simulate_experience(10000)
+    model.transition_probs, _ = model.estimate_model()
+    model.value_iteration()
+    return model.value_function, model.get_policy()
+
+if __name__ == "__main__":
+    tests = parse_tests()
+    results = []
+
+    for i, test in enumerate(tests, start=1):
+        value_function, policy = run_model_based_solver(test)
+        print(f"Grid shape: {value_function.shape}")
+        results.append((value_function, policy))
+
+        print(f"Test {i} Value Function:")
+        for row in value_function:
+            print(" ".join([f"{v:.4f}" for v in row]))
+
+        print(f"Test {i} Policy:")
+        print_policy(policy, test['h'], test['w'])
+
+        print("-"*40 + "\n")
